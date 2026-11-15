@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: mkdir proj && base64 -d Project.txt | tar xz -C proj && cp LlmClient.kt proj/app/src/main/java/com/example/neonbuddy/LlmClient.kt
+      - run: mkdir proj && base64 -d Project.txt | tar xz -C proj && cp LlmClient.kt ChatAccessibilityService.kt MascotOverlayService.kt proj/app/src/main/java/com/example/neonbuddy/
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
