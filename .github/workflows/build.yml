@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: mkdir proj && base64 -d project.txt | tar xz -C proj
+      - run: mkdir proj && base64 -d Project.txt | tar xz -C proj
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
