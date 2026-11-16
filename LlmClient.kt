@@ -21,10 +21,13 @@ data class LlmResult(val sees: String, val reply: String?)
 
 class LlmClient(
     private val apiKey: String,
-    // Tried in order. Google retires models often, so edit this list if one stops working.
-    private val models: List<String> = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"),
+    // Tried in order (fast model first). Google retires models often, so edit this list if one stops working.
+    private val models: List<String> = listOf("gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash"),
 ) {
-    private val http = OkHttpClient.Builder().readTimeout(40, TimeUnit.SECONDS).build()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
     private var working: String? = null  // remembers which model answered
 
     suspend fun draftReply(chatText: String?, screenshot: Bitmap?, persona: String): LlmResult? =
@@ -65,7 +68,11 @@ class LlmClient(
                 var attempt = 0
                 while (attempt < 3) {
                     attempt++
-                    val res = http.newCall(req).execute()
+                    val res = try {
+                        http.newCall(req).execute()
+                    } catch (e: java.io.IOException) {
+                        throw LlmException("Network problem: " + e.javaClass.simpleName + " " + (e.message ?: ""))
+                    }
                     val code = res.code
                     val txt = res.body?.string().orEmpty()
                     res.close()
