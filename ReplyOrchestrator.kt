@@ -20,27 +20,43 @@ class ReplyOrchestrator(
 
     var mode = Mode.MANUAL_APPROVAL
     var persona = "friendly, casual, concise. In screenshots, MY messages are the colored bubbles on the RIGHT side; the other person's are on the LEFT"
-    private var job: Job? = null
+    private var debounceJob: Job? = null
+    private var busy = false
     private var lastHandled = ""
     private var lastCallAt = 0L
     private val minGapMs = 8_000L   // local rate limit so we never spam the API
 
     fun onChatChanged() {
-        job?.cancel()
-        job = scope.launch {
-            delay(1500)  // debounce: wait for the screen to settle
-            if (System.currentTimeMillis() - lastCallAt < minGapMs) return@launch
-            process()
+        if (busy) return   // already thinking: never interrupt a running request
+        debounceJob?.cancel()
+        debounceJob = scope.launch {
+            delay(1500)  // wait for the screen to settle
+            val wait = minGapMs - (System.currentTimeMillis() - lastCallAt)
+            if (wait > 0) delay(wait)
+            if (busy) return@launch
+            busy = true
+            scope.launch {
+                try {
+                    process()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    ui.say("Oops: " + (e.message ?: e.toString()).take(160))
+                    ui.setState(MascotState.IDLE)
+                } finally {
+                    busy = false
+                }
+            }
         }
     }
 
     private suspend fun process() {
-        val svc = ChatAccessibilityService.instance ?: return ui.toast("Enable the accessibility service")
+        val svc = ChatAccessibilityService.instance ?: return ui.say("Turn on the accessibility service")
         val text = svc.readVisibleText()
         // Loop guard: same screen content as last time -> ignore.
         if (text != null && text.hashCode().toString() == lastHandled) return
         val shot = capture.grab()  // screenshot so the AI can see who sent what
-        if (text == null && shot == null) return ui.toast("Couldn't read the chat")
+        if (text == null && shot == null) return ui.say("I can't read this chat")
 
         ui.setState(MascotState.THINKING)
         lastCallAt = System.currentTimeMillis()
@@ -48,7 +64,7 @@ class ReplyOrchestrator(
             val r = llm.draftReply(text, shot, persona)
             lastHandled = text?.hashCode().toString()
             if (r == null) {
-                ui.toast("Gemini gave no answer"); ui.setState(MascotState.IDLE); return
+                ui.say("Gemini gave no answer"); ui.setState(MascotState.IDLE); return
             }
             val reply = r.reply
             if (reply == null) {
@@ -64,14 +80,14 @@ class ReplyOrchestrator(
                     onReject = { ui.setState(MascotState.IDLE) })
             }
         } catch (e: LlmException) {
-            ui.toast(e.message ?: "LLM error"); ui.setState(MascotState.IDLE)
+            ui.say(e.message ?: "LLM error"); ui.setState(MascotState.IDLE)
         }
     }
 
     private fun send(reply: String) {
         val ok = ChatAccessibilityService.instance?.typeAndSend(reply, send = true) == true
         ui.setState(if (ok) MascotState.HAPPY else MascotState.IDLE)
-        if (!ok) ui.toast("Couldn't type/send. Is the chat open?")
+        if (!ok) ui.say("Couldn't type/send. Is the chat open?")
         scope.launch { delay(2500); ui.setState(MascotState.IDLE) }
     }
 }
