@@ -47,9 +47,10 @@ class CommandActivity : AppCompatActivity() {
             WindowManager.LayoutParams.WRAP_CONTENT)
     }
 
-    private fun submit() {
+    private fun submit() 
         val text = input.text.toString().trim()
         if (text.isEmpty()) return
+        if (ModeCommands.handle(this, text, answer)) return
         val key = getSharedPreferences("prefs", MODE_PRIVATE).getString("api_key", "") ?: ""
         answer.text = "Thinking..."
         scope.launch {
