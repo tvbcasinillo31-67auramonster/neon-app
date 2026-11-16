@@ -19,6 +19,7 @@ class ReplyOrchestrator(
     }
 
     var mode = Mode.MANUAL_APPROVAL
+    var signature = "Bert"   // added to the end of every reply so people know it's the mascot
     var persona = "friendly, casual, concise. In screenshots, MY messages are the colored bubbles on the RIGHT side; the other person's are on the LEFT"
     private var debounceJob: Job? = null
     private var busy = false
@@ -66,7 +67,7 @@ class ReplyOrchestrator(
             if (r == null) {
                 ui.say("Gemini gave no answer"); ui.setState(MascotState.IDLE); return
             }
-            val reply = r.reply
+            val reply = r.reply?.let { it.trimEnd() + " - " + signature }
             if (reply == null) {
                 ui.say(r.sees.ifBlank { "Nothing to reply to right now." })
                 ui.setState(MascotState.IDLE); return
@@ -85,9 +86,12 @@ class ReplyOrchestrator(
     }
 
     private fun send(reply: String) {
-        val ok = ChatAccessibilityService.instance?.typeAndSend(reply, send = true) == true
-        ui.setState(if (ok) MascotState.HAPPY else MascotState.IDLE)
-        if (!ok) ui.say("Couldn't type/send. Is the chat open?")
-        scope.launch { delay(2500); ui.setState(MascotState.IDLE) }
+        scope.launch {
+            val ok = ChatAccessibilityService.instance?.typeAndSend(reply, send = true) == true
+            ui.setState(if (ok) MascotState.HAPPY else MascotState.IDLE)
+            if (!ok) ui.say("Couldn't send. Is the chat open with the message box showing?")
+            delay(2500)
+            ui.setState(MascotState.IDLE)
+        }
     }
 }
