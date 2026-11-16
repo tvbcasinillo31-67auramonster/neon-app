@@ -12,6 +12,8 @@ import kotlinx.coroutines.*
 
 /** Foreground service that owns the floating mascot and wires everything together. */
 class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
+    companion object { var instance: MascotOverlayService? = null }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var wm: WindowManager
     private lateinit var root: LinearLayout
@@ -27,6 +29,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        instance = this
         startForegroundNotification()   // must happen before using MediaProjection
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         capture = ScreenCaptureManager(this)
@@ -46,7 +49,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     private fun buildOverlay() {
         val d = resources.displayMetrics.density
         mascot = MascotView(this)
-        bubbleText = TextView(this).apply { setTextColor(Color.WHITE); textSize = 14f; maxWidth = (240 * d).toInt() }
+        bubbleText = TextView(this).apply { setTextColor(Color.WHITE); textSize = 19f; maxWidth = (300 * d).toInt() }
         val approve = Button(this).apply { text = "SEND" }
         val reject = Button(this).apply { text = "NOPE" }
         row = LinearLayout(this).apply { addView(approve); addView(reject) }
@@ -70,7 +73,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.START; x = 40; y = 400 }
 
-        // Drag to move, tap to toggle mode, hold ~0.7s to close the mascot.
+        // Drag to move, tap to ask Bert, hold ~0.7s to close the mascot.
         var sx = 0; var sy = 0; var tx = 0f; var ty = 0f
         var moved = false; var longPressed = false
         val longPress = Runnable {
@@ -92,7 +95,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
                 }
                 MotionEvent.ACTION_UP -> {
                     mascot.removeCallbacks(longPress)
-                    if (!moved && !longPressed) toggleMode()
+                    if (!moved && !longPressed) openAsk()
                 }
                 MotionEvent.ACTION_CANCEL -> mascot.removeCallbacks(longPress)
             }
@@ -105,8 +108,13 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     private lateinit var pendingApprove: Button
     private lateinit var pendingReject: Button
 
-    private fun toggleMode() {
-        orchestrator.mode = if (orchestrator.mode == Mode.MANUAL_APPROVAL) Mode.FULL_AUTO else Mode.MANUAL_APPROVAL
+    private fun openAsk() {
+        startActivity(Intent(this, CommandActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Called from the Ask Bert box: true = reply without asking, false = ask first. */
+    fun setMode(auto: Boolean) {
+        orchestrator.mode = if (auto) Mode.FULL_AUTO else Mode.MANUAL_APPROVAL
         toast("Mode: ${orchestrator.mode}")
         setState(MascotState.HAPPY)
         scope.launch { delay(1200); setState(MascotState.IDLE) }
@@ -118,7 +126,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     override fun say(msg: String) {
         hideJob?.cancel()
         bubbleText.text = msg; row.visibility = View.GONE; bubble.visibility = View.VISIBLE
-        hideJob = scope.launch { delay(6000); bubble.visibility = View.GONE }
+        hideJob = scope.launch { delay(12000); bubble.visibility = View.GONE }
     }
     override fun showDraft(text: String, onApprove: () -> Unit, onReject: () -> Unit) {
         hideJob?.cancel()
@@ -137,6 +145,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     }
 
     override fun onDestroy() {
+        instance = null
         scope.cancel(); capture.stop()
         ChatAccessibilityService.onChatChanged = null
         if (::root.isInitialized) wm.removeView(root)
