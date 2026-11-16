@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: mkdir proj && base64 -d Project.txt | tar xz -C proj && cp LlmClient.kt ChatAccessibilityService.kt MascotOverlayService.kt ReplyOrchestrator.kt CommandActivity.kt AssistantBrain.kt proj/app/src/main/java/com/example/neonbuddy/ && cp AndroidManifest.xml proj/app/src/main/AndroidManifest.xml
-      - uses: actions/setup-java@v4
+      - run: mkdir proj && base64 -d Project.txt | tar xz -C proj && cp LlmClient.kt ChatAccessibilityService.kt MascotOverlayService.kt ReplyOrchestrator.kt CommandActivity.kt AssistantBrain.kt Persona.kt Voice.kt MascotView.kt proj/app/src/main/java/com/example/neonbuddy/ && cp AndroidManifest.xml proj/app/src/main/AndroidManifest.xml
         with:
           distribution: temurin
           java-version: 17
