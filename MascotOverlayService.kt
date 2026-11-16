@@ -18,6 +18,8 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     private lateinit var mascot: MascotView
     private lateinit var bubble: LinearLayout
     private lateinit var bubbleText: TextView
+    private lateinit var row: LinearLayout
+    private var hideJob: Job? = null
     private lateinit var params: WindowManager.LayoutParams
     private lateinit var capture: ScreenCaptureManager
     private lateinit var orchestrator: ReplyOrchestrator
@@ -47,7 +49,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
         bubbleText = TextView(this).apply { setTextColor(Color.WHITE); textSize = 14f; maxWidth = (240 * d).toInt() }
         val approve = Button(this).apply { text = "SEND" }
         val reject = Button(this).apply { text = "NOPE" }
-        val row = LinearLayout(this).apply { addView(approve); addView(reject) }
+        row = LinearLayout(this).apply { addView(approve); addView(reject) }
         bubble = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; visibility = View.GONE
             setPadding((12*d).toInt(), (10*d).toInt(), (12*d).toInt(), (10*d).toInt())
@@ -59,7 +61,7 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
         }
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.END
-            addView(bubble); addView(mascot, LinearLayout.LayoutParams((96*d).toInt(), (96*d).toInt()))
+            addView(mascot, LinearLayout.LayoutParams((96*d).toInt(), (96*d).toInt())); addView(bubble)
         }
 
         params = WindowManager.LayoutParams(
@@ -113,8 +115,14 @@ class MascotOverlayService : Service(), ReplyOrchestrator.Ui {
     // ---- ReplyOrchestrator.Ui ----
     override fun setState(s: MascotState) { mascot.state = s }
     override fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+    override fun say(msg: String) {
+        hideJob?.cancel()
+        bubbleText.text = msg; row.visibility = View.GONE; bubble.visibility = View.VISIBLE
+        hideJob = scope.launch { delay(6000); bubble.visibility = View.GONE }
+    }
     override fun showDraft(text: String, onApprove: () -> Unit, onReject: () -> Unit) {
-        bubbleText.text = text; bubble.visibility = View.VISIBLE
+        hideJob?.cancel()
+        bubbleText.text = text; row.visibility = View.VISIBLE; bubble.visibility = View.VISIBLE
         pendingApprove.setOnClickListener { bubble.visibility = View.GONE; onApprove() }
         pendingReject.setOnClickListener { bubble.visibility = View.GONE; onReject() }
     }
