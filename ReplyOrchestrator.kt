@@ -41,7 +41,7 @@ class ReplyOrchestrator(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    ui.say("Oops: " + (e.message ?: e.toString()).take(160))
+                    ui.say("Oops: " + e.javaClass.simpleName + " " + (e.message ?: "").take(150))
                     ui.setState(MascotState.IDLE)
                 } finally {
                     busy = false
