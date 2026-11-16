@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 
 /** Reads visible chat text from whitelisted apps and can type + send a reply. */
 class ChatAccessibilityService : AccessibilityService() {
@@ -38,21 +39,41 @@ class ChatAccessibilityService : AccessibilityService() {
         return out.takeLast(25).joinToString("\n").ifBlank { null }
     }
 
-    /** Types into the focused input and taps Send. Returns false if either step fails. */
-    fun typeAndSend(text: String, send: Boolean): Boolean {
-        val root = rootInActiveWindow ?: return false
+    /** Types into the chat box, waits for the Send button to appear, then taps it. */
+    suspend fun typeAndSend(text: String, send: Boolean): Boolean {
+        var root = rootInActiveWindow ?: return false
         if (root.packageName?.toString() !in ALLOWED_PACKAGES) return false
         val input = findFirst(root) { it.isEditable } ?: return false
+        input.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
         if (!input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return false
         if (!send) return true
-        val btn = findFirst(root) {
-            val d = (it.contentDescription ?: it.text)?.toString()?.lowercase() ?: ""
-            it.isClickable && d == "send"
-        } ?: return false
-        return btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        // The Send button only appears after typing, so look again on a fresh screen.
+        repeat(8) {
+            delay(350)
+            root = rootInActiveWindow ?: return@repeat
+            val btn = findFirst(root) { isSendButton(it) }
+            if (btn != null && clickNodeOrParent(btn)) return true
+        }
+        return false
+    }
+
+    private fun isSendButton(n: AccessibilityNodeInfo): Boolean {
+        val d = (n.contentDescription ?: n.text)?.toString()?.trim()?.lowercase() ?: return false
+        return d == "send" || d == "send message"
+    }
+
+    private fun clickNodeOrParent(n: AccessibilityNodeInfo): Boolean {
+        var cur: AccessibilityNodeInfo? = n
+        var hops = 0
+        while (cur != null && hops < 4) {
+            if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+            cur = cur.parent
+            hops++
+        }
+        return false
     }
 
     private fun findFirst(n: AccessibilityNodeInfo?, pred: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
